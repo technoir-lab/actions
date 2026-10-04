@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  merge_group:
+    types: [ checks_requested ]
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-26.04
+          - macos-26
+          - windows-2025
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up KMP
+        id: setup-kmp
+        uses: ./setup-kotlin-multiplatform
+
+      - name: Check restored toolchains
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.setup-kmp.outputs.cache-hit }}
+        run: |
+          echo "Cache hit: ${CACHE_HIT:-false}"
+          if [ "$CACHE_HIT" = "true" ]; then
+            test -f ~/.konan/marker
+          fi
+
+      - name: Create toolchain marker
+        shell: bash
+        run: |
+          mkdir -p ~/.konan
+          echo "$GITHUB_SHA" > ~/.konan/marker
+
+  actionlint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-26.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1.77.0
+        with:
+          level: warning
+          fail_level: error

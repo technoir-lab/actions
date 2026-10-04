@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  push:
+    tags: [ "*" ]
+
+concurrency:
+  group: ${{ github.workflow_ref }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-26.04
+
+    permissions:
+      contents: write # Required for creating release
+
+    steps:
+      - name: Create release
+        uses: softprops/action-gh-release@v3.0.3
+        with:
+          generate_release_notes: true

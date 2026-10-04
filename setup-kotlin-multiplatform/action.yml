@@ -1,0 +1,32 @@
+name: Set up Kotlin Multiplatform
+description: Caches Kotlin/Native toolchains for Kotlin Multiplatform builds.
+
+inputs:
+  cache-read-only:
+    description: Restore the Kotlin/Native toolchain cache without saving it. Defaults to true everywhere except the default branch.
+    required: false
+    default: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+outputs:
+  cache-hit:
+    description: Whether the Kotlin/Native toolchain cache was restored with an exact key match.
+    value: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Kotlin/Native toolchains
+      id: cache
+      if: inputs.cache-read-only != 'true'
+      uses: actions/cache@v6.1.0
+      with:
+        path: ~/.konan
+        key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('settings.gradle.kts') }}
+
+    - name: Restore Kotlin/Native toolchains
+      id: restore
+      if: inputs.cache-read-only == 'true'
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: ~/.konan
+        key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('settings.gradle.kts') }}
