@@ -83,7 +83,24 @@ runs:
         COMMENT_ID: ${{ github.event.comment.id }}
       run: |
         if ! gh api --method POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes --silent; then
-          echo "Skipped the reaction; reacting to comments requires the issues: write permission."
+          echo "Skipped the reaction; reacting to comments requires the pull-requests: write permission."
+        fi
+
+    - name: Set pending commit status
+      id: status
+      if: steps.command.outputs.effort != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.issue.number }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+        if gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$sha" --silent \
+          -f state=pending -f context="Code Review" -f description="Claude is reviewing the pull request." -f target_url="$RUN_URL"; then
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        else
+          echo "Skipped the commit status; setting commit statuses requires the statuses: write permission."
         fi
 
     # Check out the default branch rather than the PR head: Claude Code loads settings and hooks
@@ -94,7 +111,16 @@ runs:
       with:
         fetch-depth: 1
 
+    # Fetch the pull request's latest commit without checking it out, so Claude can read its files with git.
+    - name: Fetch pull request head
+      if: steps.command.outputs.effort != ''
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.issue.number }}
+      run: git fetch --no-tags --depth=1 origin "+refs/pull/$PR_NUMBER/head:refs/remotes/origin/pr/$PR_NUMBER"
+
     - name: Review
+      id: review
       if: steps.command.outputs.effort != ''
       uses: anthropics/claude-code-action@v1.0.248
       with:
@@ -117,3 +143,22 @@ runs:
             "Bash(gh issue view *)"
             "Bash(gh issue list *)"
             "Bash(gh search *)"
+
+    - name: Set final commit status
+      if: always() && steps.status.outputs.sha != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SHA: ${{ steps.status.outputs.sha }}
+        OUTCOME: ${{ steps.review.outcome }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        if [[ "$OUTCOME" == "success" ]]; then
+          state=success
+          description="Claude reviewed the pull request."
+        else
+          state=failure
+          description="The review didn't finish."
+        fi
+        gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" --silent \
+          -f state="$state" -f context="Code Review" -f description="$description" -f target_url="$RUN_URL"

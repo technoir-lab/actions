@@ -26,18 +26,19 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: read
-      issues: write
+      pull-requests: write
+      issues: read
+      statuses: write
       id-token: write
 
     steps:
       - name: Review
-        uses: technoir-lab/actions/code-review@v1.1.1
+        uses: technoir-lab/actions/code-review@v1.1.2
         with:
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
-GitHub runs `issue_comment` workflows only from the default branch, so the workflow takes effect once it's merged. The `if` condition keeps runners from starting for other comments. The `issues: write` permission lets the action react to the `/review` comment; without it, the action skips the reaction.
+GitHub runs `issue_comment` workflows only from the default branch, so the workflow takes effect once it's merged. The `if` condition keeps runners from starting for other comments. The `pull-requests: write` permission lets the action react to the `/review` comment, and `statuses: write` lets it set a commit status; without them, the action skips the reaction or the status.
 
 ## Inputs
 
@@ -53,13 +54,13 @@ GitHub runs `issue_comment` workflows only from the default branch, so the workf
 /review [low|medium|high|xhigh|max]
 ```
 
-Post the command at the start of a pull request comment. The optional argument sets Claude's reasoning effort and defaults to `high`. The action reacts to an accepted request with 👀 before the review starts. Text on later lines of the comment is ignored. A comment whose first word isn't `/review`, such as `/reviewer`, doesn't start a review.
+Post the command at the start of a pull request comment. The optional argument sets Claude's reasoning effort and defaults to `high`. The action reacts to an accepted request with 👀 and sets a pending `Code Review` status, linked to the workflow run, on the pull request's latest commit. The status changes to success when the review finishes, or to failure if it doesn't. Text on later lines of the comment is ignored. A comment whose first word isn't `/review`, such as `/reviewer`, doesn't start a review.
 
 ## Security
 
 - **Maintainers only by default.** The commenter must have the role set by `required-role` or a higher one; a request from anyone else fails. Custom repository roles never qualify. `read` and `triage` aren't accepted: every GitHub user has `read` on a public repository, and neither role can push changes.
 - **Pull requests from forks.** `issue_comment` workflows have access to secrets, so maintainers can request reviews of fork pull requests.
-- **Default branch checkout.** The action checks out the default branch, never the pull request head. Claude Code loads settings and hooks from the working tree, so code from a fork must not run with access to secrets. Claude reads the pull request's changes through the GitHub API.
+- **Default branch checkout.** The action checks out the default branch, never the pull request head. Claude Code loads settings and hooks from the working tree, so code from a fork must not run with access to secrets. Claude reads the pull request's changes through the GitHub API. The action also fetches the pull request's latest commit as `origin/pr/<number>` without checking it out, so Claude can read its files with `git show`; none of its code runs.
 
 ## Limitations
 
