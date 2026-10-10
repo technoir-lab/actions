@@ -3,6 +3,7 @@ updates:
   - package-ecosystem: "github-actions"
     directories:
       - "/"
+      - "/code-review"
       - "/setup-kotlin-multiplatform"
     schedule:
       interval: "monthly"

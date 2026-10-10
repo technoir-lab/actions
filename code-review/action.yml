@@ -1,0 +1,90 @@
+name: Code Review
+description: Reviews a pull request with Claude Code when a maintainer comments `/review [effort]` on it.
+
+inputs:
+  claude-code-oauth-token:
+    description: OAuth token for a Claude subscription, generated with `claude setup-token`.
+    required: true
+  required-role:
+    description: Minimum repository role required to request a review; one of `write`, `maintain` or `admin`.
+    required: false
+    default: maintain
+
+runs:
+  using: composite
+  steps:
+    - name: Parse command
+      id: command
+      shell: bash
+      env:
+        COMMENT_BODY: ${{ github.event.comment.body }}
+      run: |
+        if [[ "$GITHUB_EVENT_NAME" != "issue_comment" ]] || ! jq -e '.issue.pull_request' "$GITHUB_EVENT_PATH" > /dev/null; then
+          echo "::error::The code-review action runs only on issue_comment events for pull requests."
+          exit 1
+        fi
+
+        first_line=${COMMENT_BODY%%$'\n'*}
+        read -r command effort extra <<< "${first_line%$'\r'}"
+        if [[ "$command" != "/review" ]]; then
+          echo "The comment isn't a /review command."
+          exit 0
+        fi
+
+        effort=${effort:-high}
+        if [[ -n "$extra" || ! "$effort" =~ ^(low|medium|high|xhigh|max)$ ]]; then
+          echo "::error::Usage: /review [low|medium|high|xhigh|max]"
+          exit 1
+        fi
+        echo "effort=$effort" >> "$GITHUB_OUTPUT"
+
+    - name: Check permissions
+      if: steps.command.outputs.effort != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        COMMENTER: ${{ github.event.comment.user.login }}
+        REQUIRED_ROLE: ${{ inputs.required-role }}
+      run: |
+        roles=(write maintain admin)
+        # Prints the role's position in roles, or -1 for read, triage, custom and unknown roles.
+        level() {
+          local i
+          for i in "${!roles[@]}"; do
+            if [[ "${roles[i]}" == "$1" ]]; then
+              echo "$i"
+              return
+            fi
+          done
+          echo -1
+        }
+
+        required=$(level "$REQUIRED_ROLE")
+        if (( required < 0 )); then
+          echo "::error::Unsupported required-role '$REQUIRED_ROLE'; expected write, maintain or admin."
+          exit 1
+        fi
+
+        role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$COMMENTER/permission" --jq .role_name)
+        if (( $(level "$role") < required )); then
+          echo "::error::Requesting a review requires the $REQUIRED_ROLE role or higher; $COMMENTER has the $role role."
+          exit 1
+        fi
+
+    # Check out the default branch rather than the PR head: Claude Code loads settings and hooks
+    # from the working tree, and code from fork PRs must not run with access to secrets.
+    - name: Checkout
+      if: steps.command.outputs.effort != ''
+      uses: actions/checkout@v7.0.1
+      with:
+        fetch-depth: 1
+
+    - name: Review
+      if: steps.command.outputs.effort != ''
+      uses: anthropics/claude-code-action@v1.0.248
+      with:
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+        plugins: "code-review@claude-code-plugins"
+        prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.issue.number }}"
+        claude_args: '--effort ${{ steps.command.outputs.effort }} --allowedTools "mcp__github_inline_comment__create_inline_comment"'
