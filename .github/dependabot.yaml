@@ -5,4 +5,4 @@ updates:
       - "/"
       - "/setup-kotlin-multiplatform"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
