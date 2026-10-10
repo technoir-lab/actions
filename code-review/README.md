@@ -27,23 +27,24 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      issues: read
+      issues: write
       id-token: write
 
     steps:
       - name: Review
-        uses: technoir-lab/actions/code-review@v1.1.0
+        uses: technoir-lab/actions/code-review@v1.1.1
         with:
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
-GitHub runs `issue_comment` workflows only from the default branch, so the workflow takes effect once it's merged. The `if` condition keeps runners from starting for other comments.
+GitHub runs `issue_comment` workflows only from the default branch, so the workflow takes effect once it's merged. The `if` condition keeps runners from starting for other comments. The `issues: write` permission lets the action react to the `/review` comment; without it, the action skips the reaction.
 
 ## Inputs
 
 | Input | Default | Description |
 | --- | --- | --- |
 | `claude-code-oauth-token` | | OAuth token for a Claude subscription, generated with `claude setup-token`. |
+| `model` | `opus` | Model for the review session: an alias such as `opus` or `sonnet`, or a full model ID. |
 | `required-role` | `maintain` | Minimum repository role required to request a review: `write`, `maintain` or `admin`. |
 
 ## Command
@@ -52,7 +53,7 @@ GitHub runs `issue_comment` workflows only from the default branch, so the workf
 /review [low|medium|high|xhigh|max]
 ```
 
-Post the command at the start of a pull request comment. The optional argument sets Claude's reasoning effort and defaults to `high`. Text on later lines of the comment is ignored. A comment whose first word isn't `/review`, such as `/reviewer`, doesn't start a review.
+Post the command at the start of a pull request comment. The optional argument sets Claude's reasoning effort and defaults to `high`. The action reacts to an accepted request with 👀 before the review starts. Text on later lines of the comment is ignored. A comment whose first word isn't `/review`, such as `/reviewer`, doesn't start a review.
 
 ## Security
 

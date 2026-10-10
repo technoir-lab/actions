@@ -5,6 +5,10 @@ inputs:
   claude-code-oauth-token:
     description: OAuth token for a Claude subscription, generated with `claude setup-token`.
     required: true
+  model:
+    description: Model for the review session; an alias such as `opus` or `sonnet`, or a full model ID.
+    required: false
+    default: opus
   required-role:
     description: Minimum repository role required to request a review; one of `write`, `maintain` or `admin`.
     required: false
@@ -71,6 +75,17 @@ runs:
           exit 1
         fi
 
+    - name: React to comment
+      if: steps.command.outputs.effort != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        COMMENT_ID: ${{ github.event.comment.id }}
+      run: |
+        if ! gh api --method POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes --silent; then
+          echo "Skipped the reaction; reacting to comments requires the issues: write permission."
+        fi
+
     # Check out the default branch rather than the PR head: Claude Code loads settings and hooks
     # from the working tree, and code from fork PRs must not run with access to secrets.
     - name: Checkout
@@ -87,4 +102,18 @@ runs:
         plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
         plugins: "code-review@claude-code-plugins"
         prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.issue.number }}"
-        claude_args: '--effort ${{ steps.command.outputs.effort }} --allowedTools "mcp__github_inline_comment__create_inline_comment"'
+        # The action stops at Claude's first result, so subagents must run in the foreground to finish
+        # before it (anthropics/claude-code-action#1852).
+        settings: '{"env": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}}'
+        # Allow the plugin's read-only gh commands for the whole session, including subagents.
+        claude_args: |
+          --model ${{ inputs.model }}
+          --effort ${{ steps.command.outputs.effort }}
+          --allowedTools
+            "mcp__github_inline_comment__create_inline_comment"
+            "Bash(gh pr view *)"
+            "Bash(gh pr diff *)"
+            "Bash(gh pr list *)"
+            "Bash(gh issue view *)"
+            "Bash(gh issue list *)"
+            "Bash(gh search *)"
