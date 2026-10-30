@@ -27,6 +27,7 @@ jobs:
 
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -51,6 +52,26 @@ jobs:
         run: |
           mkdir -p ~/.konan
           echo "$GITHUB_SHA" > ~/.konan/marker
+
+      - name: Set up GCP Gradle build cache
+        id: setup-build-cache
+        uses: ./setup-gcp-gradle-build-cache
+
+      - name: Check build cache credentials
+        shell: bash
+        env:
+          ENABLED: ${{ steps.setup-build-cache.outputs.enabled }}
+        run: |
+          echo "Build cache enabled: $ENABLED"
+          if [ "$ENABLED" = "true" ]; then
+            test -s "$GCP_BUILD_CACHE_CREDENTIALS"
+            [[ "$GCP_BUILD_CACHE_CREDENTIALS" == "$RUNNER_TEMP"/* ]]
+            test "$GCP_BUILD_CACHE_PUSH" = "true"
+          else
+            test -z "${GCP_BUILD_CACHE_CREDENTIALS:-}"
+            test -z "${GCP_BUILD_CACHE_PUSH:-}"
+          fi
+          test -z "$(find . -maxdepth 1 -name 'gha-creds-*.json')"
 
   actionlint:
     name: Lint GitHub Actions

@@ -2,7 +2,13 @@
 
 ## Project Structure & Module Organization
 
-This repository publishes two composite GitHub Actions: `setup-kotlin-multiplatform/` caches Kotlin/Native toolchains, and `code-review/` runs maintainer-requested Claude reviews. Each directory contains `action.yml` and a usage `README.md`. CI, release, and review workflows live in `.github/workflows/`; lint configuration is `.github/actionlint.yaml`.
+This repository publishes composite GitHub Actions:
+
+- `code-review/` runs maintainer-requested Claude reviews.
+- `setup-gcp-gradle-build-cache/` authenticates jobs to the remote Gradle build cache.
+- `setup-kotlin-multiplatform/` caches Kotlin/Native toolchains.
+
+Each directory contains `action.yml` and a usage `README.md`. CI, release, and review workflows live in `.github/workflows/`; lint configuration is `.github/actionlint.yaml`.
 
 ## Build, Test, and Development Commands
 
@@ -19,7 +25,7 @@ Use two-space YAML indentation, `action.yml` for action metadata, and `.yaml` fo
 
 ## Testing Guidelines
 
-CI tests Kotlin/Native cache behavior on `ubuntu-26.04`, `macos-26`, and `windows-2025` by restoring and checking a marker in `~/.konan`. Extend descriptively named CI steps when changing cache behavior or outputs. Preserve existing CI job names: the `main` ruleset requires them as status checks, and each `Checks` job name includes its runner label, so renaming a job or changing a runner needs a matching update to the ruleset's required checks. There is no standalone test framework or coverage threshold. `actionlint` checks workflows; verify composite-action behavior separately in GitHub Actions.
+CI tests Kotlin/Native cache behavior on `ubuntu-26.04`, `macos-26`, and `windows-2025` by restoring and checking a marker in `~/.konan`, and checks that the Gradle build cache setup exports credentials from the runner's temporary directory and enables cache pushes whenever a job in a `technoir-lab` repository can request an OIDC token, leaving none in the workspace. Extend descriptively named CI steps when changing cache behavior or outputs. Preserve existing CI job names: the `main` ruleset requires them as status checks, and each `Checks` job name includes its runner label, so renaming a job or changing a runner needs a matching update to the ruleset's required checks. There is no standalone test framework or coverage threshold. `actionlint` checks workflows; verify composite-action behavior separately in GitHub Actions.
 
 ## Commit & Pull Request Guidelines
 
@@ -29,6 +35,6 @@ PR descriptions should explain the behavior change, link relevant issues, and st
 
 ## Security & Releases
 
-Keep OAuth tokens in GitHub Actions secrets. Pass event data through `env` before using it in shell scripts. Preserve the code-review action's permission checks and default-branch checkout; never execute pull request code with review credentials.
+Keep OAuth tokens in GitHub Actions secrets. The build cache setup authenticates through Workload Identity Federation managed by the infrastructure repository; keep its provider and service account in sync with that configuration. Pass event data through `env` before using it in shell scripts. Preserve the code-review action's permission checks and default-branch checkout; never execute pull request code with review credentials.
 
 All actions share one release tag. Reference releases by action directory and exact tag, and keep README examples consistent with the intended release.
