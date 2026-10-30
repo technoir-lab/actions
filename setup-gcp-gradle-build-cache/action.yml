@@ -45,6 +45,8 @@ runs:
         credentials_file="$RUNNER_TEMP/gcp-build-cache-credentials.json"
         mv "$CREDENTIALS_FILE" "$credentials_file"
         {
+          echo "GCP_BUILD_CACHE_PROJECT_ID=technoir-lab"
+          echo "GCP_BUILD_CACHE_BUCKET_NAME=technoir-lab-gradle-build-cache"
           echo "GCP_BUILD_CACHE_CREDENTIALS=$credentials_file"
           echo "GCP_BUILD_CACHE_PUSH=true"
         } >> "$GITHUB_ENV"
