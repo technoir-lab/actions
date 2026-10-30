@@ -64,10 +64,14 @@ jobs:
         run: |
           echo "Build cache enabled: $ENABLED"
           if [ "$ENABLED" = "true" ]; then
+            test -n "$GCP_BUILD_CACHE_PROJECT_ID"
+            test -n "$GCP_BUILD_CACHE_BUCKET_NAME"
             test -s "$GCP_BUILD_CACHE_CREDENTIALS"
             [[ "$GCP_BUILD_CACHE_CREDENTIALS" == "$RUNNER_TEMP"/* ]]
             test "$GCP_BUILD_CACHE_PUSH" = "true"
           else
+            test -z "${GCP_BUILD_CACHE_PROJECT_ID:-}"
+            test -z "${GCP_BUILD_CACHE_BUCKET_NAME:-}"
             test -z "${GCP_BUILD_CACHE_CREDENTIALS:-}"
             test -z "${GCP_BUILD_CACHE_PUSH:-}"
           fi
