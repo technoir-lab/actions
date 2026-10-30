@@ -1,0 +1,50 @@
+name: Set up GCP Gradle build cache
+description: Gives the job read and write access to the Technoir Lab remote Gradle build cache.
+
+outputs:
+  enabled:
+    description: Whether the job authenticated to the remote build cache.
+    value: ${{ steps.auth.outcome == 'success' }}
+
+runs:
+  using: composite
+  steps:
+    # Federation trusts only technoir-lab repositories, so skip elsewhere, such as in forks, instead of failing the job.
+    - name: Check build cache eligibility
+      id: eligibility
+      shell: bash
+      env:
+        REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+      run: |
+        if [ "$REPOSITORY_OWNER_ID" != "233320956" ]; then
+          echo "::notice title=Gradle build cache::Only technoir-lab repositories can use the remote build cache, so Gradle builds run without it."
+        elif [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::notice title=Gradle build cache::The job cannot request an OIDC token, so Gradle builds run without the remote build cache. Grant the id-token: write permission to use it."
+        else
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Keep Application Default Credentials untouched for other Google Cloud tools in the job.
+    - name: Authenticate to Google Cloud
+      id: auth
+      if: steps.eligibility.outputs.eligible == 'true'
+      uses: google-github-actions/auth@v3.0.0
+      with:
+        workload_identity_provider: projects/917963959822/locations/global/workloadIdentityPools/github-build-cache/providers/technoir-lab
+        service_account: gradle-build-cache@technoir-lab.iam.gserviceaccount.com
+        export_environment_variables: false
+
+    # Keep the credentials out of the workspace, where artifact uploads and commits can pick them up. The auth action
+    # skips its cleanup without environment exports, so rely on the runner emptying RUNNER_TEMP after the job.
+    - name: Export build cache settings
+      if: steps.auth.outcome == 'success'
+      shell: bash
+      env:
+        CREDENTIALS_FILE: ${{ steps.auth.outputs.credentials_file_path }}
+      run: |
+        credentials_file="$RUNNER_TEMP/gcp-build-cache-credentials.json"
+        mv "$CREDENTIALS_FILE" "$credentials_file"
+        {
+          echo "GCP_BUILD_CACHE_CREDENTIALS=$credentials_file"
+          echo "GCP_BUILD_CACHE_PUSH=true"
+        } >> "$GITHUB_ENV"
